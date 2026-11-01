@@ -12,6 +12,7 @@ const supplyRoutes = require('./routes/supplies');
 const vehicleRoutes = require('./routes/vehicles');
 const deliveryRoutes = require('./routes/delivery-routes');
 const matchRoutes = require('./routes/matches');
+const dashboardRoutes = require('./routes/dashboard');
 const mapDbError = require('./utils/dbErrors');
 
 const app = express();
@@ -42,6 +43,7 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/victims', victimRoutes);
 app.use('/api/requests', requestRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/depots', depotRoutes);
 app.use('/api/shelters', shelterRoutes);
