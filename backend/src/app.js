@@ -6,6 +6,11 @@ const { getMongoDb } = require('./db/mongo');
 const authRoutes = require('./routes/auth');
 const victimRoutes = require('./routes/victims');
 const requestRoutes = require('./routes/requests');
+const depotRoutes = require('./routes/depots');
+const shelterRoutes = require('./routes/shelters');
+const supplyRoutes = require('./routes/supplies');
+const vehicleRoutes = require('./routes/vehicles');
+const deliveryRoutes = require('./routes/delivery-routes');
 const mapDbError = require('./utils/dbErrors');
 
 const app = express();
@@ -36,6 +41,11 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/victims', victimRoutes);
 app.use('/api/requests', requestRoutes);
+app.use('/api/depots', depotRoutes);
+app.use('/api/shelters', shelterRoutes);
+app.use('/api/supplies', supplyRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/routes', deliveryRoutes);
 
 // Unknown route
 app.use((req, res) => {

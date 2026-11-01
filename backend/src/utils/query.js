@@ -27,4 +27,22 @@ function paginated(rows, total, { page, limit }) {
   return { data: rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
-module.exports = { parsePagination, parseSort, paginated };
+// Collects WHERE conditions and their parameters:
+//   const f = filters(); f.add('status = ?', 'pending'); f.sql() -> "WHERE status = ?"; f.params -> ['pending']
+// SQL fragments passed to add() must be written in code; only values come from users.
+function filters() {
+  const where = [];
+  const params = [];
+  return {
+    params,
+    add(sql, ...values) {
+      where.push(sql);
+      params.push(...values);
+    },
+    sql() {
+      return where.length ? `WHERE ${where.join(' AND ')}` : '';
+    },
+  };
+}
+
+module.exports = { parsePagination, parseSort, paginated, filters };
