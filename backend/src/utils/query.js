@@ -12,12 +12,12 @@ function parsePagination(query, { defaultLimit = 20, maxLimit = 100 } = {}) {
 
 // ?sort=name&order=desc -> "name DESC". `allowed` maps public sort keys to SQL
 // expressions, so user input never reaches the ORDER BY clause directly.
-function parseSort(query, allowed, defaultSort) {
+function parseSort(query, allowed, defaultSort, defaultOrder = 'asc') {
   const key = query.sort === undefined ? defaultSort : query.sort;
   if (typeof key !== 'string' || !Object.hasOwn(allowed, key)) {
     throw new HttpError(400, `sort must be one of: ${Object.keys(allowed).join(', ')}`);
   }
-  const order = query.order === undefined ? 'asc' : query.order;
+  const order = query.order === undefined ? defaultOrder : query.order;
   if (order !== 'asc' && order !== 'desc') throw new HttpError(400, 'order must be asc or desc');
   return `${allowed[key]} ${order.toUpperCase()}`;
 }

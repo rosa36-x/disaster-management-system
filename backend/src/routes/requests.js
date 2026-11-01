@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/mysql');
 const HttpError = require('../utils/httpError');
+const withMatchingLock = require('../utils/matchingLock');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { parseId, queryEnum, queryText, escapeLike, validateBody } = require('../utils/validate');
 const { parsePagination, parseSort, paginated } = require('../utils/query');
@@ -139,6 +140,30 @@ router.patch('/:id/cancel', requireRole('admin', 'field_worker'), async (req, re
     throw new HttpError(409, `Only pending requests can be cancelled (current status: ${request.status})`);
   }
   res.json({ request });
+});
+
+// GET /api/requests/:id/history -> status changes recorded by the request triggers
+router.get('/:id/history', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!(await findRequest(id))) throw new HttpError(404, 'Request not found');
+
+  const [history] = await pool.query(
+    'SELECT history_id, old_status, new_status, changed_at FROM request_history WHERE request_id = ? ORDER BY changed_at, history_id',
+    [id]
+  );
+  res.json({ request_id: id, history });
+});
+
+// POST /api/requests/:id/match  (admin, logistics_manager)
+// Runs sp_match_request: nearest supply with enough stock + nearest free vehicle.
+// If nothing fits ("No supply available", "No vehicle available") the procedure's
+// message comes back as a 409 and nothing changes.
+router.post('/:id/match', requireRole('admin', 'logistics_manager'), async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!(await findRequest(id))) throw new HttpError(404, 'Request not found');
+
+  await withMatchingLock((conn) => conn.query('CALL sp_match_request(?)', [id]));
+  res.json({ request: await findRequest(id) });
 });
 
 module.exports = router;
