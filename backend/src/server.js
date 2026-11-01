@@ -1,7 +1,8 @@
 const { port } = require('./config/env');
 const app = require('./app');
 const pool = require('./db/mysql');
-const { client, connectMongo } = require('./db/mongo');
+const { client, connectMongo, getMongoDb } = require('./db/mongo');
+const { ensureMongoSchema } = require('./db/mongoSchema');
 
 async function start() {
   // Fail fast: don't accept requests if a database is unreachable.
@@ -18,6 +19,14 @@ async function start() {
     console.log('MongoDB connected');
   } catch (err) {
     console.error(`MongoDB connection failed: ${err.message}`);
+    process.exit(1);
+  }
+
+  try {
+    await ensureMongoSchema(getMongoDb());
+    console.log('MongoDB validators and indexes ready');
+  } catch (err) {
+    console.error(`MongoDB schema setup failed: ${err.message}`);
     process.exit(1);
   }
 

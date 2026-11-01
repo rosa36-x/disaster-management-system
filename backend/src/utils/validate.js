@@ -1,3 +1,4 @@
+const { ObjectId } = require('mongodb');
 const HttpError = require('./httpError');
 
 const bad = (message) => new HttpError(400, message);
@@ -6,6 +7,28 @@ const bad = (message) => new HttpError(400, message);
 function parseId(value, name = 'id') {
   const n = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
   if (!Number.isSafeInteger(n) || n < 1) throw bad(`${name} must be a positive integer`);
+  return n;
+}
+
+// "65f1c0..." (24 hex chars) -> ObjectId. Rejects anything else, including 12-char strings
+// that the driver would otherwise accept.
+function parseObjectId(value, name = 'id') {
+  if (typeof value !== 'string' || !/^[0-9a-fA-F]{24}$/.test(value)) {
+    throw bad(`${name} must be a valid id`);
+  }
+  return new ObjectId(value);
+}
+
+// Optional numeric query param ("12.97") with a range. Returns undefined when absent.
+function queryNumber(value, name, { min, max, required = false } = {}) {
+  if (value === undefined) {
+    if (required) throw bad(`${name} is required`);
+    return undefined;
+  }
+  const n = typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : NaN;
+  if (!Number.isFinite(n) || (min !== undefined && n < min) || (max !== undefined && n > max)) {
+    throw bad(`${name} must be a number between ${min} and ${max}`);
+  }
   return n;
 }
 
@@ -27,6 +50,11 @@ function queryText(value, name, max = 100) {
   return text === '' ? undefined : text;
 }
 
+// Escapes regex special characters so user text is matched literally in a Mongo $regex.
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Escapes % and _ so user text in a LIKE search is matched literally.
 function escapeLike(text) {
   return text.replace(/[\\%_]/g, '\\$&');
@@ -43,6 +71,22 @@ function checkValue(key, value, rule) {
     case 'enum':
       if (!rule.values.includes(value)) throw bad(`${key} must be one of: ${rule.values.join(', ')}`);
       return value;
+    case 'intArray': {
+      if (!Array.isArray(value)) throw bad(`${key} must be an array of positive integers`);
+      if (rule.maxItems && value.length > rule.maxItems) throw bad(`${key} can have at most ${rule.maxItems} items`);
+      if (!value.every((n) => Number.isInteger(n) && n >= 1)) throw bad(`${key} must contain only positive integers`);
+      return [...new Set(value)];
+    }
+    case 'stringArray': {
+      if (!Array.isArray(value)) throw bad(`${key} must be an array of strings`);
+      if (rule.maxItems && value.length > rule.maxItems) throw bad(`${key} can have at most ${rule.maxItems} items`);
+      const items = value.map((v) => {
+        if (typeof v !== 'string' || v.trim() === '') throw bad(`${key} must contain only non-empty strings`);
+        if (rule.maxLength && v.trim().length > rule.maxLength) throw bad(`${key} items must be at most ${rule.maxLength} characters`);
+        return v.trim();
+      });
+      return [...new Set(items)];
+    }
     case 'string': {
       if (typeof value !== 'string') throw bad(`${key} must be a string`);
       let text = value.trim();
@@ -51,6 +95,7 @@ function checkValue(key, value, rule) {
         if (rule.nullable) return null;
         throw bad(`${key} cannot be empty`);
       }
+      if (rule.minLength && text.length < rule.minLength) throw bad(`${key} must be at least ${rule.minLength} characters`);
       if (rule.max && text.length > rule.max) throw bad(`${key} must be at most ${rule.max} characters`);
       return text;
     }
@@ -94,4 +139,4 @@ function validateBody(body, schema, { partial = false } = {}) {
   return out;
 }
 
-module.exports = { parseId, queryEnum, queryText, escapeLike, validateBody };
+module.exports = { parseId, parseObjectId, queryEnum, queryText, queryNumber, escapeLike, escapeRegex, validateBody };

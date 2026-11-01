@@ -3,6 +3,10 @@ const HttpError = require('./httpError');
 // Turns raw MySQL errors into clean HTTP errors. Anything not listed here is
 // returned unchanged and ends up as a generic 500 (details only in the server log).
 function mapDbError(err) {
+  // MongoDB errors carry numeric codes (MySQL's are strings like 'ER_DUP_ENTRY').
+  if (err.code === 121) return new HttpError(400, 'Document failed database validation');
+  if (err.code === 11000) return new HttpError(409, 'A document with the same unique value already exists');
+
   switch (err.code) {
     case 'ER_DUP_ENTRY':
       return new HttpError(409, 'A record with the same unique value already exists');
