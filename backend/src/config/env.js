@@ -6,6 +6,7 @@ const required = [
   'MYSQL_DATABASE',
   'MONGO_URI',
   'MONGO_DB',
+  'JWT_SECRET',
 ];
 
 const missing = required.filter((key) => !process.env[key]);
@@ -18,6 +19,10 @@ if (missing.length > 0) {
 module.exports = {
   port: Number(process.env.PORT) || 4000,
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  jwt: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  },
   mysql: {
     host: process.env.MYSQL_HOST,
     port: Number(process.env.MYSQL_PORT) || 3306,

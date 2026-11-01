@@ -3,6 +3,7 @@ const cors = require('cors');
 const { corsOrigin } = require('./config/env');
 const pool = require('./db/mysql');
 const { getMongoDb } = require('./db/mongo');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 
@@ -29,6 +30,8 @@ app.get('/api/health', async (req, res) => {
   res.status(healthy ? 200 : 503).json({ status: healthy ? 'ok' : 'degraded', ...status });
 });
 
+app.use('/api/auth', authRoutes);
+
 // Unknown route
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
@@ -36,8 +39,11 @@ app.use((req, res) => {
 
 // Central error handler: any error passed to next(err) ends up here.
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const status = err.status || 500;
+  // Only log unexpected failures; 4xx errors are normal client mistakes.
+  if (status >= 500) console.error(err);
+  // Don't leak internal error details (SQL errors etc.) to the client.
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
 });
 
 module.exports = app;
