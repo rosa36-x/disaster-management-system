@@ -87,3 +87,15 @@ CREATE TABLE request_history (
     changed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (request_id) REFERENCES request(request_id)
 );
+
+CREATE TABLE users (
+    user_id        INT PRIMARY KEY AUTO_INCREMENT,
+    username       VARCHAR(50) NOT NULL UNIQUE,
+    full_name      VARCHAR(150),
+    password_hash  VARCHAR(255) NOT NULL,
+    role           ENUM('admin','logistics_manager','field_worker') NOT NULL DEFAULT 'field_worker',
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (CHAR_LENGTH(username) >= 3),
+    -- passwords must be stored as bcrypt hashes, never plain text
+    CHECK (CHAR_LENGTH(password_hash) = 60 AND password_hash LIKE '$2_$%')
+);

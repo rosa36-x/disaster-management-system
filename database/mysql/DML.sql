@@ -221,6 +221,23 @@ VALUES
 
 
 -- =========================================================
+-- 8. USERS
+-- Final: 3 (one per role)
+--
+-- password_hash holds bcrypt hashes only (enforced by CHECK).
+-- DEV/DEMO seed accounts: change these passwords before any
+-- real deployment.
+-- =========================================================
+
+INSERT INTO users
+(username, full_name, password_hash, role)
+VALUES
+('admin','System Administrator','$2b$10$ZgHzW50/4sEyTDN/WtRvOO7mMv5rqbDQQBr2Jxj4TAoqgl/HTj9K.','admin'),
+('logistics','Logistics Manager','$2b$10$zacEYkVoSbjUNt8lxqOk9.AqJjw3YxKHbwy5CjruzvsJxJBCzZOfS','logistics_manager'),
+('fieldworker','Field Worker','$2b$10$33Y3T.9H9pUj7ny6RTfrcOXqHEu/2XAh2Tm/j.5hdk1tEt0qRZ7X.','field_worker');
+
+
+-- =========================================================
 -- FUNCTIONS
 -- =========================================================
 
