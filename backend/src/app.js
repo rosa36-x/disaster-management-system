@@ -4,6 +4,9 @@ const { corsOrigin } = require('./config/env');
 const pool = require('./db/mysql');
 const { getMongoDb } = require('./db/mongo');
 const authRoutes = require('./routes/auth');
+const victimRoutes = require('./routes/victims');
+const requestRoutes = require('./routes/requests');
+const mapDbError = require('./utils/dbErrors');
 
 const app = express();
 
@@ -31,6 +34,8 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/victims', victimRoutes);
+app.use('/api/requests', requestRoutes);
 
 // Unknown route
 app.use((req, res) => {
@@ -39,11 +44,13 @@ app.use((req, res) => {
 
 // Central error handler: any error passed to next(err) ends up here.
 app.use((err, req, res, next) => {
-  const status = err.status || 500;
+  // Known MySQL errors (duplicate, foreign key, CHECK, trigger SIGNAL...) become 4xx.
+  const error = mapDbError(err);
+  const status = error.status || 500;
   // Only log unexpected failures; 4xx errors are normal client mistakes.
   if (status >= 500) console.error(err);
   // Don't leak internal error details (SQL errors etc.) to the client.
-  res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : error.message });
 });
 
 module.exports = app;
