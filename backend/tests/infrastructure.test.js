@@ -20,6 +20,7 @@ h.start(4103, async (call, check) => {
   check('depot create as logistics 201', (await call('POST', '/api/depots', dep, T.logistics)).status === 201);
   check('depot create missing name 400', (await call('POST', '/api/depots', { latitude: 1, longitude: 2 }, T.admin)).status === 400);
   check('depot create lat 91 400', (await call('POST', '/api/depots', { ...dep, latitude: 91 }, T.admin)).status === 400);
+  check('depot create longitude -181 400', (await call('POST', '/api/depots', { ...dep, longitude: -181 }, T.admin)).status === 400);
   check('depot patch empty 400', (await call('PATCH', '/api/depots/21', {}, T.admin)).status === 400);
   check('depot patch 200', (await call('PATCH', '/api/depots/21', { name: 'X' }, T.logistics)).status === 200);
   check('depot delete as logistics 403', (await call('DELETE', '/api/depots/21', null, T.logistics)).status === 403);
