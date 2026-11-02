@@ -1,7 +1,3 @@
-# Automated test results (npm test in backend/)
-# These tests run the real API with fake databases: they check validation, roles, query building and error handling.
-# Live checks against real MySQL/MongoDB are in tests/smoke.js (npm run smoke).
-
 
 > disaster-relief-backend@1.0.0 test
 > node tests/run-all.js
@@ -99,6 +95,7 @@ PASS supplies bad location_type 400
 PASS supplies bad in_stock 400
 PASS supply create (depot) as logistics 201
 PASS supply insert params lowercased
+PASS supply duplicate location+type -> 409 pointing to restock
 PASS supply both depot+shelter 400
 PASS supply neither 400
 PASS supply negative qty 400
@@ -156,6 +153,15 @@ PASS lock released after SIGNAL
 PASS no vehicle -> 409
 PASS match missing request 404
 PASS match bad id 400
+PASS match with depot_id 200, calls sp_match_request_at_depot(5, 3)
+PASS match with depot_id does not call sp_match_request
+PASS depot over-ask -> 409 with requested/available
+PASS lock released after depot over-ask
+PASS match with unknown depot 404, nothing called
+PASS match depot_id=0 400
+PASS match depot_id string 400
+PASS match unknown body field 400
+PASS match depot_id as field_worker 403
 PASS history 200
 PASS history missing request 404
 PASS complete as field_worker 403
@@ -164,7 +170,7 @@ PASS calls sp_complete_delivery(11)
 PASS complete twice -> 409, procedure not called
 PASS lock released after 409
 PASS complete missing match 404
-PASS all 12 distinct SQL statements parse as MySQL
+PASS all 14 distinct SQL statements parse as MySQL
 
 === mongo.test.js ===
 PASS seed incident passes validator
@@ -298,6 +304,8 @@ PASS request missing 404
 PASS request create as logistics 403
 PASS request create 201
 PASS resource_type trimmed+lowercased
+PASS request create: enough stock -> no warning
+PASS request create: not enough stock -> 201 + warning with largest supply
 PASS request create invalid: missing person_id 400
 PASS request create invalid: quantity 0 400
 PASS request create invalid: quantity negative 400
@@ -319,9 +327,9 @@ PASS all emitted SQL parses as MySQL
 ok    auth.test.js                 18 passed, 0 failed
 ok    crossdb.test.js              26 passed, 0 failed
 ok    dashboard.test.js            15 passed, 0 failed
-ok    infrastructure.test.js       58 passed, 0 failed
-ok    matching.test.js             32 passed, 0 failed
+ok    infrastructure.test.js       59 passed, 0 failed
+ok    matching.test.js             41 passed, 0 failed
 ok    mongo.test.js                81 passed, 0 failed
-ok    victims-requests.test.js     64 passed, 0 failed
+ok    victims-requests.test.js     66 passed, 0 failed
 
-Total: 294 passed, 0 failed across 7 files
+Total: 306 passed, 0 failed across 7 files

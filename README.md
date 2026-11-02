@@ -61,8 +61,8 @@ mysql -u <user> -p disaster < database/mysql/DDL.sql
 mysql -u <user> -p disaster < database/mysql/DML.sql
 ```
 
-`DDL.sql` creates the tables (including `users`); `DML.sql` loads sample data, the functions, triggers and
-stored procedures, and three demo accounts (`admin`, `logistics`, `fieldworker`).
+`DDL.sql` creates the tables (including `users`), the functions, triggers and stored procedures; `DML.sql`
+loads the sample data and three demo accounts (`admin`, `logistics`, `fieldworker`).
 
 ### 2. MongoDB
 

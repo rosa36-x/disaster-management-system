@@ -123,12 +123,18 @@ const s = app.listen(4102, async () => {
 
   // ---- requests: create
   const greq = { person_id: 7, resource_type: ' Water ', quantity: 40, description: 'need water' };
-  handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 5 }] : [[reqRow]];
+  handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 5 }] : sql.includes('MAX(quantity)') ? [[{ largest: 500 }]] : [[reqRow]];
   check('request create as logistics 403', (await call('POST', '/api/requests', greq, T.logistics)).status === 403);
   calls.length = 0;
   r = await call('POST', '/api/requests', greq, T.field);
   check('request create 201', r.status === 201 && r.body.request.request_id === 5, JSON.stringify(r.body));
   check('resource_type trimmed+lowercased', calls[0].params[1] === 'water', JSON.stringify(calls[0].params));
+  // stock warning: accepted either way, but told when no single supply can serve it
+  check('request create: enough stock -> no warning', r.body.warning === undefined, JSON.stringify(r.body));
+  handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 5 }] : sql.includes('MAX(quantity)') ? [[{ largest: 25 }]] : [[reqRow]];
+  r = await call('POST', '/api/requests', greq, T.field);
+  check('request create: not enough stock -> 201 + warning with largest supply', r.status === 201 && /largest: 25/.test(r.body.warning) && /40 water/.test(r.body.warning), JSON.stringify(r.body));
+  handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 5 }] : [[reqRow]];
   for (const [name, body] of [
     ['missing person_id', { ...greq, person_id: undefined }], ['quantity 0', { ...greq, quantity: 0 }], ['quantity negative', { ...greq, quantity: -5 }],
     ['empty resource_type', { ...greq, resource_type: '  ' }], ['status in body rejected', { ...greq, status: 'matched' }],

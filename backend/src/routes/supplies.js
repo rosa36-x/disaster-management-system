@@ -11,7 +11,8 @@ router.use(requireAuth);
 
 const MANAGERS = ['admin', 'logistics_manager'];
 
-// A supply row lives at exactly one place: a depot OR a shelter (DB CHECK enforces it too).
+// A supply row lives at exactly one place: a depot OR a shelter (DB CHECK enforces it too),
+// and there is at most one row per location and resource_type (DB UNIQUE keys).
 const supplySchema = {
   depot_id: { type: 'int', min: 1 },
   shelter_id: { type: 'int', min: 1 },
@@ -81,7 +82,16 @@ router.post('/', requireRole(...MANAGERS), async (req, res) => {
   if ((data.depot_id === undefined) === (data.shelter_id === undefined)) {
     throw new HttpError(400, 'Provide exactly one of depot_id or shelter_id');
   }
-  const id = await insertRow('supply', data);
+  let id;
+  try {
+    id = await insertRow('supply', data);
+  } catch (err) {
+    // UNIQUE (depot_id, resource_type) / (shelter_id, resource_type): one stock row per place and type.
+    if (err.code === 'ER_DUP_ENTRY') {
+      throw new HttpError(409, 'This location already has a stock row for that resource; use POST /api/supplies/:id/restock');
+    }
+    throw err;
+  }
   res.status(201).json({ supply: await findSupply(id) });
 });
 

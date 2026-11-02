@@ -2,7 +2,8 @@ const pool = require('../db/mysql');
 
 // Depots ordered by distance from a point, using the fn_distance_km MySQL function.
 // With resourceType, only depots holding at least minQuantity of it are returned,
-// together with how much they have.
+// together with how much they have. (supply has one row per depot and resource_type, so the SUM
+// below equals what sp_match_request_at_depot sees.)
 async function nearestDepots(lat, lng, { resourceType, minQuantity = 1, limit = 3 } = {}) {
   const params = [lat, lng];
   let stockColumn = '';

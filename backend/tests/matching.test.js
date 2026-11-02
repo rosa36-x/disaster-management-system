@@ -80,6 +80,31 @@ h.start(4104, async (call, check) => {
   check('match missing request 404', (await call('POST', '/api/requests/99/match', null, T.admin)).status === 404);
   check('match bad id 400', (await call('POST', '/api/requests/abc/match', null, T.admin)).status === 400);
 
+  // ===== match single request from a chosen depot
+  const depotHandler = (extra) => (sql, params) => {
+    if (sql.includes('GET_LOCK')) return [[{ got: 1 }]];
+    if (sql.includes('RELEASE_LOCK')) return [[{}]];
+    if (sql.includes('FROM depot WHERE')) return [[{ depot_id: 3 }]];
+    if (sql.startsWith('CALL')) return extra ? extra(sql, params) : [[{}]];
+    return [[reqRow]];
+  };
+  h.handler = depotHandler(); h.calls.length = 0;
+  r = await call('POST', '/api/requests/5/match', { depot_id: 3 }, T.logistics);
+  const dcall = h.calls.find((c) => c.sql.startsWith('CALL'));
+  check('match with depot_id 200, calls sp_match_request_at_depot(5, 3)', r.status === 200 && dcall.sql.includes('sp_match_request_at_depot') && JSON.stringify(dcall.params) === '[5,3]', JSON.stringify(dcall));
+  check('match with depot_id does not call sp_match_request', !h.calls.some((c) => /sp_match_request\(/.test(c.sql)));
+  h.handler = depotHandler(h.dbErr('ER_SIGNAL_EXCEPTION', 'Insufficient supply at depot: requested 500, available 120')); h.calls.length = 0;
+  r = await call('POST', '/api/requests/5/match', { depot_id: 3 }, T.admin);
+  check('depot over-ask -> 409 with requested/available', r.status === 409 && r.body.error === 'Insufficient supply at depot: requested 500, available 120', JSON.stringify(r.body));
+  check('lock released after depot over-ask', h.calls[h.calls.length - 1].sql.includes('RELEASE_LOCK'));
+  h.handler = (sql) => (sql.includes('FROM depot WHERE') ? [[]] : depotHandler()(sql));
+  check('match with unknown depot 404, nothing called', (await call('POST', '/api/requests/5/match', { depot_id: 99 }, T.admin)).status === 404 && !h.calls.some((c) => c.sql.includes('sp_match_request_at_depot(?, ?)') && c.params[1] === 99));
+  check('match depot_id=0 400', (await call('POST', '/api/requests/5/match', { depot_id: 0 }, T.admin)).status === 400);
+  check('match depot_id string 400', (await call('POST', '/api/requests/5/match', { depot_id: 'x' }, T.admin)).status === 400);
+  check('match unknown body field 400', (await call('POST', '/api/requests/5/match', { supply_id: 1 }, T.admin)).status === 400);
+  h.handler = depotHandler();
+  check('match depot_id as field_worker 403', (await call('POST', '/api/requests/5/match', { depot_id: 3 }, T.field)).status === 403);
+
   // ===== history
   h.handler = (sql) => (sql.includes('request_history') ? [[{ history_id: 1, old_status: null, new_status: 'pending', changed_at: 't' }, { history_id: 2, old_status: 'pending', new_status: 'matched', changed_at: 't2' }]] : [[reqRow]]);
   r = await call('GET', '/api/requests/5/history', null, T.field);
