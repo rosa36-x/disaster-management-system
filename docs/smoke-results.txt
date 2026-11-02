@@ -1,0 +1,58 @@
+
+> disaster-relief-backend@1.0.0 smoke
+> node tests/smoke.js
+
+Smoke test against http://localhost:4000
+
+PASS health: MySQL and MongoDB both up
+PASS login: admin
+PASS login: logistics_manager
+PASS login: field_worker
+PASS login: wrong password -> 401
+PASS protected route without token -> 401
+PASS /me returns the logged-in role
+PASS register duplicate username -> 409 (UNIQUE constraint)
+PASS field_worker cannot create a depot -> 403
+PASS logistics cannot create a victim -> 403
+PASS field_worker cannot run matching -> 403
+PASS field_worker cannot delete a victim -> 403
+PASS invalid latitude -> 400
+PASS request quantity 0 -> 400
+PASS foreign key: unknown victim -> 400
+PASS shelter created
+PASS CHECK constraint: capacity below occupancy -> 400
+PASS shelter deleted (cleanup)
+PASS depot created
+PASS supply created
+PASS foreign key: delete depot still holding supply -> 409
+PASS restock adds to stock (1 + 4 = 5)
+PASS request created as pending
+PASS trigger logged the new request in request_history
+PASS sp_match_request: stock 5 < needed 8 -> 409 "No supply available"
+PASS cancel pending request -> cancelled
+PASS cancel again -> 409
+PASS trigger logged the cancellation (2 history rows)
+PASS MongoDB validator rejects an invalid document directly (error 121)
+PASS incident linking a non-existent MySQL request -> 400
+PASS incident created in MongoDB
+PASS incident -> its MySQL requests
+PASS request -> its MongoDB incidents
+PASS $geoNear finds the incident within 1 km
+PASS nearest depots (Mongo location + MySQL fn_distance_km), nearest first
+PASS field update added
+PASS incident with field updates cannot be deleted -> 409
+PASS aggregation: requirement counts include the new update
+PASS incident stats ($facet)
+PASS dashboard overview
+PASS dashboard supply-demand
+PASS dashboard shelters
+PASS dashboard priority-queue
+SKIP real matching + delivery completion (run with -- --matching)
+PASS cleanup: supply deleted
+PASS cleanup: depot deleted
+
+One cancelled request (description 'SMOKE TEST request') remains. To remove it:
+  DELETE FROM request_history WHERE request_id IN (SELECT request_id FROM request WHERE description LIKE 'SMOKE TEST%');
+  DELETE FROM request WHERE description LIKE 'SMOKE TEST%';
+
+45 passed, 0 failed, 1 skipped
