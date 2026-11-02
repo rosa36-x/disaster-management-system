@@ -101,6 +101,7 @@ h.start(4103, async (call, check) => {
   h.handler = h.listHandler([{ route_id: 1 }], 29); h.calls.length = 0;
   r = await call('GET', '/api/routes?status=blocked&depot_id=2&shelter_id=3', null, T.field);
   check('routes filters', r.status === 200 && JSON.stringify(find('LIMIT').params) === JSON.stringify(['blocked', 2, 3, 20, 0]), JSON.stringify(find('LIMIT').params));
+  check('routes invalid status filter 400', (await call('GET', '/api/routes?status=completed', null, T.admin)).status === 400);
   h.handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 30 }] : [[{ route_id: 30, depot_name: 'a', shelter_name: 'b' }]];
   check('route create 201', (await call('POST', '/api/routes', { depot_id: 1, shelter_id: 2, distance_km: 12.5 }, T.logistics)).status === 201);
   check('route distance 10000 400', (await call('POST', '/api/routes', { depot_id: 1, shelter_id: 2, distance_km: 10000 }, T.admin)).status === 400);
