@@ -1,4 +1,4 @@
-DROP DATABASE disaster IF EXISTS; 
+DROP DATABASE IF EXISTS disaster;
 CREATE DATABASE disaster;
 USE disaster; 
 CREATE TABLE victim (
