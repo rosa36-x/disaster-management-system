@@ -10,6 +10,7 @@ export const sections = [
   { id: 'vehicles', label: 'Vehicles', icon: 'Truck', group: 'Logistics' },
   { id: 'routes', label: 'Delivery routes', icon: 'Route', group: 'Logistics' },
   { id: 'matches', label: 'Assignments', icon: 'GitMerge', group: 'Logistics' },
+  { id: 'database-activity', label: 'Database Activity', icon: 'Database', group: 'System' },
 ];
 
 const field = (name, label, type = 'text', extra = {}) => ({ name, label, type, ...extra });
