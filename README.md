@@ -1,122 +1,319 @@
+
 # Disaster Relief Management System
 
-## Overview
+A web-based Disaster Relief Management System designed to coordinate emergency response operations. The application manages affected victims, disaster incidents, relief requests, shelters, depots, supplies, vehicles and delivery assignments.
 
-The Disaster Relief Management System is a database-driven application designed to support disaster relief operations by managing victims, shelters, depots, supplies, vehicles, routes and resource requests.
+## Features
 
-The system aims to improve the organisation and allocation of relief resources during emergencies.
+- Role-based authentication for administrators, logistics managers and field workers.
+- Incident reporting and field updates.
+- Victim registration and relief request management.
+- Supply inventory management across depots and shelters.
+- Shelter capacity monitoring.
+- Automated resource and vehicle matching.
+- Delivery assignment and completion tracking.
+- Automatic request status history using MySQL triggers.
+- Database Activity dashboard for viewing request history, assignments, inventory and vehicle status.
+- MongoDB integration for incident reports and field updates.
+- Dashboard for monitoring disaster response operations.
 
-## Technologies Used
+## Technology Stack
 
-- MySQL: Relational database for structured disaster management data.
-- MongoDB: NoSQL database for incident reports and field updates.
-- Next.js: Web application frontend.
-- Node.js and Express: REST API with JWT authentication and role-based access (`backend/`).
-- Docker: Local MongoDB deployment.
-- Git and GitHub: Version control and team collaboration.
-
-## Database Design
-
-### MySQL
-
-Stores structured information, including:
-- Victims
-- Depots
-- Shelters
-- Routes
-- Supplies
-- Vehicles
-- Requests
-- Match assignments
-- Request history
-
-### MongoDB
-
-Contains two collections:
-- `incident_reports`: Stores disaster details, severity, geographical location and related request information.
-- `field_updates`: Stores observations and updates submitted by relief workers.
+| Component | Technology |
+|---|---|
+| Frontend | Next.js, React |
+| Backend | Node.js, Express.js |
+| Relational Database | MySQL |
+| NoSQL Database | MongoDB |
+| Authentication | JWT, bcrypt |
+| Database Deployment | Docker |
+| Version Control | Git, GitHub |
 
 ## Project Structure
 
-- `database/mysql/`: MySQL DDL and DML scripts.
-- `mongodb/`: MongoDB commands and sample data.
-- `frontend/`: Next.js user interface.
-- `backend/`: REST API (Express), database integration, tests.
-- `docs/`: Project documentation, including the API reference (`docs/API.md`).
-- `screenshots/`: Application and database screenshots.
-
-## Setup and Running
-
-### Prerequisites
-
-- Node.js 20 or newer and npm
-- MySQL 8.0.16 or newer (earlier versions ignore the `CHECK` constraints)
-- Docker (for MongoDB 7)
-
-### 1. MySQL
-
-```bash
-mysql -u <user> -p -e "CREATE DATABASE disaster"
-mysql -u <user> -p disaster < database/mysql/DDL.sql
-mysql -u <user> -p disaster < database/mysql/DML.sql
+```text
+disaster-management-system/
+├── backend/
+│   ├── src/
+│   │   ├── routes/
+│   │   ├── middleware/
+│   │   ├── db/
+│   │   └── utils/
+│   ├── tests/
+│   ├── .env.example
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   ├── components/
+│   │   └── lib/
+│   ├── .env.example
+│   └── package.json
+├── database/
+│   └── mysql/
+│       ├── DDL.sql
+│       └── DML.sql
+├── mongodb/
+│   └── mongo_commands.js
+├── docs/
+└── README.md
 ```
 
-`DDL.sql` creates the tables (including `users`), the functions, triggers and stored procedures; `DML.sql`
-loads the sample data and three demo accounts (`admin`, `logistics`, `fieldworker`).
+## Prerequisites
 
-### 2. MongoDB
+Install the following before running the application:
+
+- Node.js 20 or later
+- npm
+- MySQL 8.0.16 or later
+- Docker Desktop
+- Git
+
+## Setup and Execution Instructions
+
+### 1. Clone the Repository
 
 ```bash
-docker run -d --name disaster-mongo -p 27017:27017 -v disaster_mongo_data:/data/db mongo:7
+git clone https://github.com/rosa36-x/disaster-management-system.git
+cd disaster-management-system
+```
+
+### 2. Configure MySQL
+
+Start your MySQL server.
+
+Create and initialise the database:
+
+```bash
+mysql -u root -p < database/mysql/DDL.sql
+mysql -u root -p disaster < database/mysql/DML.sql
+```
+
+**Important:** `DDL.sql` contains `DROP DATABASE IF EXISTS disaster`. Running it again will delete and recreate the existing database. Only execute these commands when setting up a fresh database.
+
+`DML.sql` inserts the initial sample records and demo user accounts. Run it once after the DDL script.
+
+### 3. Configure MongoDB
+
+Start a MongoDB 7 container using Docker:
+
+```bash
+docker run -d \
+  --name disaster-mongo \
+  -p 27017:27017 \
+  -v disaster_mongo_data:/data/db \
+  mongo:7
+```
+
+Initialise the MongoDB collections and sample documents:
+
+```bash
 docker exec -i disaster-mongo mongosh --quiet < mongodb/mongo_commands.js
 ```
 
-Run the sample-data script **before** the first backend start. The backend then adds the collection
-validators and indexes. To reload the sample data later, drop the database first
-(`db.getSiblingDB("disaster_relief").dropDatabase()`), run the script, and restart the backend.
-Next time just `docker start disaster-mongo`.
+This creates the `disaster_relief` database and its `incident_reports` and `field_updates` collections.
 
-### 3. Backend
+Run the sample-data script only once during initial setup to avoid duplicate documents.
+
+### 4. Configure and Start the Backend
+
+Open a terminal at the project root:
 
 ```bash
 cd backend
 npm install
-cp .env.example .env        # fill in the MySQL user/password and JWT_SECRET
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"   # a value for JWT_SECRET
-npm run dev                 # API on http://localhost:4000
+```
+
+Create the environment configuration:
+
+```bash
+cp .env.example .env
+```
+
+Update `backend/.env` with your local MySQL credentials and a secure JWT secret.
+
+The configuration should include:
+
+```env
+PORT=4000
+CORS_ORIGIN=http://localhost:3000
+
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=disaster
+
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB=disaster_relief
+
+JWT_SECRET=your_generated_secret
+JWT_EXPIRES_IN=8h
+```
+
+Generate a JWT secret using:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Start the backend:
+
+```bash
+npm run dev
+```
+
+The backend API runs at:
+
+`http://localhost:4000`
+
+Check database connectivity:
+
+```bash
 curl http://localhost:4000/api/health
 ```
 
-The health check should return `{"status":"ok","mysql":"up","mongo":"up"}`.
-The full endpoint list is in [`docs/API.md`](docs/API.md).
+Expected response:
 
-### Roles
+```json
+{
+  "status": "ok",
+  "mysql": "up",
+  "mongo": "up"
+}
+```
 
-| Role | Access |
+### 5. Configure and Start the Frontend
+
+Open a second terminal at the project root:
+
+```bash
+cd frontend
+npm install
+```
+
+Create the frontend environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Ensure it contains:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+Start the frontend:
+
+```bash
+npm run dev
+```
+
+Open the application in your browser:
+
+`http://localhost:3000`
+
+## Application Modules
+
+| Module | Description |
 |---|---|
-| `admin` | Everything, including deleting records and creating users |
-| `logistics_manager` | Manages depots, shelters, supplies, vehicles and routes; runs matching and deliveries |
-| `field_worker` | Registers victims, creates and cancels requests, files incident reports and field updates |
+| Overview | Displays disaster response and operational statistics. |
+| Incident Reports | Records and manages disaster incidents. |
+| Field Updates | Stores observations submitted by field workers. |
+| Victims | Maintains the affected-person registry. |
+| Relief Requests | Creates and tracks requests for emergency resources. |
+| Depots | Manages relief storage locations. |
+| Shelters | Tracks shelter occupancy and capacity. |
+| Supplies | Manages resource inventory. |
+| Vehicles | Tracks vehicle availability and status. |
+| Delivery Routes | Manages depot-to-shelter routes. |
+| Assignments | Displays resource and vehicle allocations and supports delivery completion. |
+| Database Activity | Displays request history, assignments, current inventory and vehicle status. |
 
-### Tests
+## Database Functionality
+
+### MySQL
+
+MySQL stores structured operational data and implements database-level integrity and automation.
+
+Key database features include:
+
+- Primary and foreign key constraints.
+- CHECK constraints for data validation.
+- Functions for distance and shelter capacity calculations.
+- Triggers for automatic request history recording.
+- Triggers for inventory deduction and vehicle status updates.
+- Stored procedures for resource matching and delivery completion.
+
+Important stored procedures include:
+
+- `sp_match_request()`
+- `sp_match_request_at_depot()`
+- `sp_match_all_pending()`
+- `sp_complete_delivery()`
+
+### MongoDB
+
+MongoDB stores document-oriented data in two collections:
+
+- `incident_reports`
+- `field_updates`
+
+It also uses document validation and a geospatial index for incident location queries.
+
+## Request and Delivery Workflow
+
+1. A field worker registers a victim and creates a relief request.
+2. A MySQL trigger automatically records the initial request status.
+3. A logistics manager runs the matching operation.
+4. A stored procedure selects suitable inventory and an available vehicle.
+5. Database triggers deduct the allocated stock, update the request status and mark the vehicle as en route.
+6. The logistics manager completes the delivery.
+7. A stored procedure marks the request as delivered and releases the vehicle.
+8. The request history trigger records the status change.
+
+The Database Activity page allows users to inspect these changes through the web application.
+
+## User Roles
+
+| Role | Permissions |
+|---|---|
+| Admin | Full system access and user administration. |
+| Logistics Manager | Manages logistics resources, matching and deliveries. |
+| Field Worker | Registers victims, creates and cancels requests, submits incident reports and field updates. |
+
+## Running Tests
+
+To run the backend automated test suite:
 
 ```bash
 cd backend
-npm test                    # 290+ automated checks, no databases needed (fakes)
-SMOKE_ADMIN_PASSWORD=... SMOKE_LOGISTICS_PASSWORD=... SMOKE_FIELDWORKER_PASSWORD=... npm run smoke
+npm test
 ```
 
-`npm test` checks validation, role permissions, query building and error handling. `npm run smoke`
-runs against the live API, MySQL and MongoDB (triggers, procedures, constraints, validators, cross-database
-links); add `-- --matching` to also run real matching.
+To run live backend smoke tests against configured databases:
 
-## Project Status
+```bash
+npm run smoke
+```
 
-- [x] Database design and SQL implementation
-- [x] MongoDB setup and initial implementation
-- [x] Backend REST API (Express): authentication, three roles, CRUD, matching, dashboard, MongoDB, cross-database endpoints
-- [x] Database validation and integrity (CHECK/foreign keys/triggers in MySQL, `$jsonSchema` in MongoDB)
-- [x] Backend automated tests and API reference (`docs/API.md`)
-- [ ] Next.js web application
-- [ ] Documentation report (ER diagram, schema, screenshots, test results)
-- [ ] Final demonstration
+The smoke tests require the backend, MySQL and MongoDB to be configured.
+
+To verify the frontend production build:
+
+```bash
+cd frontend
+npm run build
+```
+
+## Security Notes
+
+- Do not commit `.env` or `.env.local` files.
+- Use secure JWT secrets and database credentials.
+- Demo credentials should only be used in a local development environment.
+- Passwords are stored as bcrypt hashes.
+
+## Team Project
+
+This project was developed as part of an academic Database Management Systems project. It demonstrates the integration of relational and document databases, backend APIs, database triggers, stored procedures and a web-based user interface.
