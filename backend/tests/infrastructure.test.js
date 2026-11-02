@@ -42,6 +42,7 @@ h.start(4103, async (call, check) => {
   h.handler = h.dbErr('ER_CHECK_CONSTRAINT_VIOLATED');
   r = await call('PATCH', '/api/shelters/1', { capacity: 5 }, T.admin);
   check('shelter patch breaking CHECK -> 400', r.status === 400, JSON.stringify(r.body));
+  check('shelter patch negative occupancy 400', (await call('PATCH', '/api/shelters/1', { occupancy: -1 }, T.admin)).status === 400);
 
   // ===== supplies
   h.handler = h.listHandler([{ supply_id: 1 }], 33); h.calls.length = 0;
