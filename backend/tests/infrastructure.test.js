@@ -83,6 +83,7 @@ h.start(4103, async (call, check) => {
   check('vehicle create 201', (await call('POST', '/api/vehicles', { capacity: 200, latitude: 12.9, longitude: 77.5 }, T.logistics)).status === 201);
   check('vehicle create status en_route 400', (await call('POST', '/api/vehicles', { capacity: 200, status: 'en_route' }, T.admin)).status === 400);
   check('vehicle create capacity 0 400', (await call('POST', '/api/vehicles', { capacity: 0 }, T.admin)).status === 400);
+  check('vehicle create decimal capacity 400', (await call('POST', '/api/vehicles', { capacity: 200.5 }, T.admin)).status === 400);
   check('vehicle null lat allowed', (await call('POST', '/api/vehicles', { capacity: 5, latitude: null, longitude: null }, T.admin)).status === 201);
   h.handler = () => [[{ vehicle_id: 3, status: 'en_route', capacity: 200 }]];
   r = await call('PATCH', '/api/vehicles/3', { status: 'available' }, T.admin);
