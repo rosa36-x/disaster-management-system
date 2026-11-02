@@ -92,10 +92,10 @@ Routes that return a short ranked list (`dashboard/*`, `incidents/nearby`, `depo
 |---|---|---|---|
 | GET | `/api/requests` | any | Filters: `status`, `resource_type`, `priority` (victim's), `person_id`, `search`. Sort: `requested_at` `request_id` `quantity` `status` `victim_priority`. Each row includes victim name/priority and a nested `match` (or `null`) |
 | GET | `/api/requests/:id` | any | |
-| POST | `/api/requests` | admin, field_worker | `{person_id, resource_type, quantity, description?}`. Starts as `pending`; `status` can't be set by the client |
+| POST | `/api/requests` | admin, field_worker | `{person_id, resource_type, quantity, description?}`. Starts as `pending`; `status` can't be set by the client. Always accepted, but if no single supply (depot or shelter) currently holds that quantity the `201` response also has a `warning` string |
 | PATCH | `/api/requests/:id/cancel` | admin, field_worker | Only `pending` requests; otherwise `409` |
 | GET | `/api/requests/:id/history` | any | Status changes recorded by the database triggers |
-| POST | `/api/requests/:id/match` | admin, logistics_manager | Runs `sp_match_request`. `409` with the reason if no supply or vehicle fits |
+| POST | `/api/requests/:id/match` | admin, logistics_manager | Optional body `{depot_id}`. Without it, runs `sp_match_request`: nearest supply (**depot or shelter**) with enough stock, nearest free vehicle. With it, runs `sp_match_request_at_depot`: that depot only. `409` with the reason if it can't be served, e.g. `"No supply available"`, `"No vehicle available"`, `"Insufficient supply at depot: requested 500, available 120"`, `"Depot has no water in stock"`. `404` for an unknown depot |
 | GET | `/api/requests/:id/incidents` | any | MongoDB incidents that list this request |
 
 ### Matching
@@ -109,6 +109,8 @@ Routes that return a short ranked list (`dashboard/*`, `incidents/nearby`, `depo
 
 Matching and completion are serialized with a database lock; if another one is running you get `409`, retry.
 
+`/api/matches/run` never returns stock errors: requests nothing can serve stay `pending` and show up in `still_pending`. To see why a particular request can't be served, use `POST /api/requests/:id/match`.
+
 ### Depots, shelters, supplies, vehicles, routes
 Read: any role. Create and update: admin, logistics_manager. Delete: admin (`409` if still referenced).
 
@@ -117,7 +119,7 @@ Read: any role. Create and update: admin, logistics_manager. Delete: admin (`409
 | Depots | `/api/depots`, `/api/depots/:id` | `POST/PATCH {name, latitude, longitude}`. Filter: `search`. Detail includes the depot's `supplies` |
 | | `GET /api/depots/nearest` | Params: `lat`, `lng` (required), `resource_type`, `min_quantity`, `limit` (default 3). With `resource_type`, only depots holding enough stock |
 | Shelters | `/api/shelters`, `/api/shelters/:id` | `{name, latitude, longitude, capacity, occupancy?}`. Filters: `search`, `has_space=true/false`. Sort includes `free_capacity`. Occupancy above capacity is rejected |
-| Supplies | `/api/supplies`, `/api/supplies/:id` | `POST {depot_id` **or** `shelter_id, resource_type, quantity}`. Filters: `resource_type`, `location_type`, `depot_id`, `shelter_id`, `in_stock` |
+| Supplies | `/api/supplies`, `/api/supplies/:id` | `POST {depot_id` **or** `shelter_id, resource_type, quantity}`. One row per location and `resource_type`: a second `POST` for the same pair is a `409` (use `restock`). Filters: `resource_type`, `location_type`, `depot_id`, `shelter_id`, `in_stock` |
 | | `POST /api/supplies/:id/restock` | `{amount}` adds to the stock (there is deliberately no "set quantity") |
 | Vehicles | `/api/vehicles`, `/api/vehicles/:id` | `{capacity, status?, latitude?, longitude?}`. Status can only be set to `available`/`maintenance`; `en_route` is managed by matching. Filters: `status`, `min_capacity` |
 | Routes | `/api/routes`, `/api/routes/:id` | `POST {depot_id, shelter_id, distance_km?, status?}`; `PATCH` only `distance_km`/`status`. Filters: `status`, `depot_id`, `shelter_id` |

@@ -19,7 +19,7 @@ const shelterSchema = {
   occupancy: { type: 'int', min: 0, max: 1000000 },
 };
 
-// fn_shelter_free is the MySQL function from DML.sql (capacity - occupancy).
+// fn_shelter_free is the MySQL function from DDL.sql (capacity - occupancy).
 const COLUMNS = 'shelter_id, name, latitude, longitude, capacity, occupancy, fn_shelter_free(shelter_id) AS free_capacity';
 const SORTS = {
   shelter_id: 'shelter_id',

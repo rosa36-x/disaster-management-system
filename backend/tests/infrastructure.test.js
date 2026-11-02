@@ -54,6 +54,10 @@ h.start(4103, async (call, check) => {
   check('supply create (depot) as logistics 201', (await call('POST', '/api/supplies', { depot_id: 1, resource_type: 'Water', quantity: 5 }, T.logistics)).status === 201);
   h.calls.length = 0; await call('POST', '/api/supplies', { shelter_id: 2, resource_type: ' FOOD ', quantity: 5 }, T.admin);
   check('supply insert params lowercased', JSON.stringify(h.calls[0].params) === JSON.stringify([2, 'food', 5]), JSON.stringify(h.calls[0].params));
+  h.handler = h.dbErr('ER_DUP_ENTRY');
+  r = await call('POST', '/api/supplies', { depot_id: 1, resource_type: 'water', quantity: 5 }, T.admin);
+  check('supply duplicate location+type -> 409 pointing to restock', r.status === 409 && /restock/.test(r.body.error), JSON.stringify(r.body));
+  h.handler = (sql) => sql.startsWith('INSERT') ? [{ insertId: 34 }] : [[{ supply_id: 34, resource_type: 'water', quantity: 5, location_type: 'depot', location_name: 'Central Depot' }]];
   check('supply both depot+shelter 400', (await call('POST', '/api/supplies', { depot_id: 1, shelter_id: 1, resource_type: 'water', quantity: 5 }, T.admin)).status === 400);
   check('supply neither 400', (await call('POST', '/api/supplies', { resource_type: 'water', quantity: 5 }, T.admin)).status === 400);
   check('supply negative qty 400', (await call('POST', '/api/supplies', { depot_id: 1, resource_type: 'water', quantity: -1 }, T.admin)).status === 400);

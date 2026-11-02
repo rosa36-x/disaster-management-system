@@ -25,6 +25,11 @@ const requestSchema = {
   description: { type: 'string', max: 5000, nullable: true },
 };
 
+// Optional body for POST /:id/match: serve the request from one chosen depot.
+const matchSchema = {
+  depot_id: { type: 'int', min: 1 },
+};
+
 const SORTS = {
   requested_at: 'r.requested_at',
   request_id: 'r.request_id',
@@ -36,6 +41,17 @@ const SORTS = {
 async function findRequest(id) {
   const [rows] = await pool.query(`${SELECT} WHERE r.request_id = ?`, [id]);
   return rows[0] ? shape(rows[0]) : undefined;
+}
+
+// Matching serves a request from ONE supply row (depot or shelter), so that is what we compare with.
+// Returns a message when no single supply holds enough, otherwise undefined.
+async function stockWarning(resourceType, quantity) {
+  const [[row]] = await pool.query(
+    'SELECT COALESCE(MAX(quantity), 0) AS largest FROM supply WHERE resource_type = ?',
+    [resourceType]
+  );
+  if (row.largest >= quantity) return undefined;
+  return `No single supply currently holds ${quantity} ${resourceType} (largest: ${row.largest}); the request stays pending until stock is added`;
 }
 
 // GET /api/requests?status=&resource_type=&priority=&person_id=&search=&sort=&order=&page=&limit=
@@ -105,7 +121,9 @@ router.post('/', requireRole('admin', 'field_worker'), async (req, res) => {
     columns.map((c) => data[c])
   );
 
-  res.status(201).json({ request: await findRequest(result.insertId) });
+  // The request is still accepted (stock may arrive later), but the caller is told if it can't be served now.
+  const warning = await stockWarning(data.resource_type, data.quantity);
+  res.status(201).json({ request: await findRequest(result.insertId), ...(warning && { warning }) });
 });
 
 // PATCH /api/requests/:id/cancel  (admin, field_worker). Only pending requests:
@@ -140,15 +158,23 @@ router.get('/:id/history', async (req, res) => {
   res.json({ request_id: id, history });
 });
 
-// POST /api/requests/:id/match  (admin, logistics_manager)
-// Runs sp_match_request: nearest supply with enough stock + nearest free vehicle.
-// If nothing fits ("No supply available", "No vehicle available") the procedure's
-// message comes back as a 409 and nothing changes.
+// POST /api/requests/:id/match  (admin, logistics_manager)  body (optional): { depot_id }
+// Without depot_id: sp_match_request picks the nearest supply (depot or shelter) with enough
+// stock and the nearest free vehicle. With depot_id: sp_match_request_at_depot serves it from
+// that depot only. Either way the procedure's message comes back as a 409 and nothing changes,
+// e.g. "No supply available" or "Insufficient supply at depot: requested 500, available 120".
 router.post('/:id/match', requireRole('admin', 'logistics_manager'), async (req, res) => {
   const id = parseId(req.params.id);
+  const { depot_id: depotId } = validateBody(req.body ?? {}, matchSchema);
   if (!(await findRequest(id))) throw new HttpError(404, 'Request not found');
 
-  await withMatchingLock((conn) => conn.query('CALL sp_match_request(?)', [id]));
+  if (depotId === undefined) {
+    await withMatchingLock((conn) => conn.query('CALL sp_match_request(?)', [id]));
+  } else {
+    const [depots] = await pool.query('SELECT depot_id FROM depot WHERE depot_id = ?', [depotId]);
+    if (depots.length === 0) throw new HttpError(404, 'Depot not found');
+    await withMatchingLock((conn) => conn.query('CALL sp_match_request_at_depot(?, ?)', [id, depotId]));
+  }
   res.json({ request: await findRequest(id) });
 });
 

@@ -46,6 +46,10 @@ CREATE TABLE supply (
     CHECK (quantity >= 0),
     CHECK ((shelter_id IS NOT NULL AND depot_id IS NULL)
         OR (shelter_id IS NULL AND depot_id IS NOT NULL)),
+    -- one stock row per location and resource type, so "what a depot holds" is a single
+    -- number (NULLs never collide, so each key only applies to its own kind of location)
+    UNIQUE (depot_id, resource_type),
+    UNIQUE (shelter_id, resource_type),
     FOREIGN KEY (depot_id) REFERENCES depot(depot_id),
     FOREIGN KEY (shelter_id) REFERENCES shelter(shelter_id)
 );
@@ -166,36 +170,26 @@ DELIMITER ;
 
 DELIMITER //
 
-CREATE PROCEDURE sp_match_request(IN p_req INT)
+-- Shared last step: nearest free vehicle to the supply point, ETA, then the INSERT
+-- (trg_match_bi re-checks type and stock, trg_match_ai deducts stock and updates statuses).
+CREATE PROCEDURE sp_assign_supply(IN p_req INT, IN p_supply INT)
 BEGIN
-  DECLARE v_type VARCHAR(50); DECLARE v_qty INT; DECLARE v_status VARCHAR(20);
+  DECLARE v_qty INT;
   DECLARE v_lat DECIMAL(9,6); DECLARE v_lon DECIMAL(9,6);
-  DECLARE v_supply INT; DECLARE v_slat DECIMAL(9,6); DECLARE v_slon DECIMAL(9,6);
+  DECLARE v_slat DECIMAL(9,6); DECLARE v_slon DECIMAL(9,6);
   DECLARE v_veh INT; DECLARE v_vlat DECIMAL(9,6); DECLARE v_vlon DECIMAL(9,6);
   DECLARE v_dist DOUBLE; DECLARE v_eta INT;
   DECLARE CONTINUE HANDLER FOR NOT FOUND BEGIN END;
 
-  SELECT r.resource_type,r.quantity,r.status,v.latitude,v.longitude
-    INTO v_type,v_qty,v_status,v_lat,v_lon
+  SELECT r.quantity,v.latitude,v.longitude INTO v_qty,v_lat,v_lon
     FROM request r JOIN victim v ON r.person_id=v.person_id
     WHERE r.request_id=p_req;
 
-  IF v_status IS NULL OR v_status <> 'pending' THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Request not found or not pending';
-  END IF;
-
-  -- nearest supply (depot or shelter) with enough stock
-  SELECT s.supply_id, COALESCE(d.latitude,sh.latitude), COALESCE(d.longitude,sh.longitude)
-    INTO v_supply,v_slat,v_slon
+  SELECT COALESCE(d.latitude,sh.latitude), COALESCE(d.longitude,sh.longitude) INTO v_slat,v_slon
     FROM supply s
     LEFT JOIN depot d ON s.depot_id=d.depot_id
     LEFT JOIN shelter sh ON s.shelter_id=sh.shelter_id
-    WHERE s.resource_type=v_type AND s.quantity>=v_qty
-    ORDER BY fn_distance_km(v_lat,v_lon,COALESCE(d.latitude,sh.latitude),COALESCE(d.longitude,sh.longitude))
-    LIMIT 1;
-  IF v_supply IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='No supply available';
-  END IF;
+    WHERE s.supply_id=p_supply;
 
   -- nearest available vehicle to the supply point
   SELECT vehicle_id,latitude,longitude INTO v_veh,v_vlat,v_vlon
@@ -210,7 +204,65 @@ BEGIN
   SET v_eta  = CEIL(v_dist/40*60);   -- assumes 40 km/h
 
   INSERT INTO match_assignment(request_id,supply_id,vehicle_id,assigned_qty,eta_minutes)
-  VALUES (p_req,v_supply,v_veh,v_qty,v_eta);
+  VALUES (p_req,p_supply,v_veh,v_qty,v_eta);
+END//
+
+-- Automatic: nearest supply (depot or shelter) that holds enough stock.
+CREATE PROCEDURE sp_match_request(IN p_req INT)
+BEGIN
+  DECLARE v_type VARCHAR(50); DECLARE v_qty INT; DECLARE v_status VARCHAR(20);
+  DECLARE v_lat DECIMAL(9,6); DECLARE v_lon DECIMAL(9,6);
+  DECLARE v_supply INT;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND BEGIN END;
+
+  SELECT r.resource_type,r.quantity,r.status,v.latitude,v.longitude
+    INTO v_type,v_qty,v_status,v_lat,v_lon
+    FROM request r JOIN victim v ON r.person_id=v.person_id
+    WHERE r.request_id=p_req;
+
+  IF v_status IS NULL OR v_status <> 'pending' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Request not found or not pending';
+  END IF;
+
+  SELECT s.supply_id INTO v_supply
+    FROM supply s
+    LEFT JOIN depot d ON s.depot_id=d.depot_id
+    LEFT JOIN shelter sh ON s.shelter_id=sh.shelter_id
+    WHERE s.resource_type=v_type AND s.quantity>=v_qty
+    ORDER BY fn_distance_km(v_lat,v_lon,COALESCE(d.latitude,sh.latitude),COALESCE(d.longitude,sh.longitude))
+    LIMIT 1;
+  IF v_supply IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='No supply available';
+  END IF;
+
+  CALL sp_assign_supply(p_req, v_supply);
+END//
+
+-- Chosen depot: fails with the requested and available amounts if it can't cover the request.
+CREATE PROCEDURE sp_match_request_at_depot(IN p_req INT, IN p_depot INT)
+BEGIN
+  DECLARE v_type VARCHAR(50); DECLARE v_qty INT; DECLARE v_status VARCHAR(20);
+  DECLARE v_supply INT; DECLARE v_have INT; DECLARE v_msg VARCHAR(128);
+  DECLARE CONTINUE HANDLER FOR NOT FOUND BEGIN END;
+
+  SELECT resource_type,quantity,status INTO v_type,v_qty,v_status
+    FROM request WHERE request_id=p_req;
+  IF v_status IS NULL OR v_status <> 'pending' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Request not found or not pending';
+  END IF;
+
+  SELECT supply_id,quantity INTO v_supply,v_have
+    FROM supply WHERE depot_id=p_depot AND resource_type=v_type;
+  IF v_supply IS NULL THEN
+    SET v_msg = CONCAT('Depot has no ',v_type,' in stock');
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT=v_msg;
+  END IF;
+  IF v_have < v_qty THEN
+    SET v_msg = CONCAT('Insufficient supply at depot: requested ',v_qty,', available ',v_have);
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT=v_msg;
+  END IF;
+
+  CALL sp_assign_supply(p_req, v_supply);
 END//
 
 CREATE PROCEDURE sp_match_all_pending()
