@@ -1,0 +1,327 @@
+# Automated test results (npm test in backend/)
+# These tests run the real API with fake databases: they check validation, roles, query building and error handling.
+# Live checks against real MySQL/MongoDB are in tests/smoke.js (npm run smoke).
+
+
+> disaster-relief-backend@1.0.0 test
+> node tests/run-all.js
+
+
+=== auth.test.js ===
+PASS admin login 200 + token
+PASS logistics login (seed hash)
+PASS fieldworker login (seed hash)
+PASS response has no password_hash
+PASS wrong password 401
+PASS unknown user 401, same message
+PASS missing body 400
+PASS /me no token 401
+PASS /me garbage token 401
+PASS /me valid token
+PASS register as field_worker 403
+PASS register as logistics 403
+PASS register no token 401
+PASS register as admin 201
+PASS register duplicate 409
+PASS register bad role 400
+PASS register short password 400
+PASS register short username 400
+
+=== crossdb.test.js ===
+PASS incident requests: no token 401
+PASS incident requests 200
+PASS summary counts by status (zero-filled)
+PASS reports ids that no longer exist in MySQL
+PASS matched request has nested match
+PASS MySQL queried with the Mongo ids
+PASS incident with no links: empty result, MySQL not queried
+PASS incident requests: missing incident 404
+PASS incident requests: bad id 400
+PASS nearest-depots 200
+PASS Mongo [lng,lat] converted to (lat,lng) for MySQL, default limit 3
+PASS uses fn_distance_km, no stock join without resource_type
+PASS resource filter: stock join + params order
+PASS nearest-depots bad min_quantity 400
+PASS nearest-depots missing incident 404
+PASS depots/nearest 200 (not read as an :id)
+PASS depots/nearest with stock filter, limit capped at 20
+PASS depots/nearest missing lng 400
+PASS depots/nearest lat 95 400
+PASS depots/nearest text lat 400
+PASS depots/nearest no token 401
+PASS request incidents 200
+PASS Mongo queried by related_request_ids, newest first
+PASS request incidents: missing request 404
+PASS request incidents: bad id 400
+PASS all 4 distinct SQL statements parse as MySQL
+
+=== dashboard.test.js ===
+PASS overview no token 401
+PASS overview 200
+PASS requests zero-filled by status
+PASS pending_by_priority zero-filled
+PASS vehicles zero-filled + total
+PASS victims + people_affected
+PASS shelter occupancy pct (513/2000 = 25.7)
+PASS depots count
+PASS empty DB: zeros, no divide-by-zero
+PASS supply-demand 200
+PASS shelters limit param
+PASS shelters limit capped at 50
+PASS shelters bad limit 400
+PASS priority queue default limit 10 + matching order
+PASS all 9 distinct SQL statements parse as MySQL
+
+=== infrastructure.test.js ===
+PASS depots no token 401
+PASS depots list + search escaped
+PASS depot detail includes supplies
+PASS depot missing 404
+PASS depot create as field_worker 403
+PASS depot create as logistics 201
+PASS depot create missing name 400
+PASS depot create lat 91 400
+PASS depot patch empty 400
+PASS depot patch 200
+PASS depot delete as logistics 403
+PASS depot delete in use 409
+PASS depot delete 204
+PASS shelters has_space + free_capacity sort
+PASS shelters has_space=maybe 400
+PASS shelter create 201
+PASS shelter occupancy > capacity 400
+PASS shelter capacity 0 400
+PASS shelter negative occupancy 400
+PASS shelter patch breaking CHECK -> 400
+PASS supplies filter params
+PASS supplies location/in_stock SQL
+PASS supplies bad location_type 400
+PASS supplies bad in_stock 400
+PASS supply create (depot) as logistics 201
+PASS supply insert params lowercased
+PASS supply both depot+shelter 400
+PASS supply neither 400
+PASS supply negative qty 400
+PASS supply as field_worker 403
+PASS restock 200 + atomic SQL
+PASS restock amount 0 400
+PASS restock missing amount 400
+PASS restock as field_worker 403
+PASS restock missing supply 404
+PASS supply delete used by match 409
+PASS no PATCH route for supply (404)
+PASS vehicles filters
+PASS vehicles bad status 400
+PASS vehicle create 201
+PASS vehicle create status en_route 400
+PASS vehicle create capacity 0 400
+PASS vehicle null lat allowed
+PASS vehicle patch status while en_route 409
+PASS vehicle location update while en_route OK
+PASS vehicle status change guarded in SQL
+PASS vehicle patch missing 404
+PASS routes filters
+PASS route create 201
+PASS route distance 10000 400
+PASS route negative distance 400
+PASS route missing shelter 400
+PASS route patch cannot change depot_id
+PASS route patch status blocked 200
+PASS route patch bad status 400
+PASS route unknown depot FK 400
+PASS route delete as logistics 403
+PASS all 31 distinct SQL statements parse as MySQL
+
+=== matching.test.js ===
+PASS matches no token 401
+PASS matches list + filter params
+PASS matches default sort newest first
+PASS matches bad request_status 400
+PASS matches bad vehicle_id 400
+PASS match get one 200
+PASS match missing 404
+PASS run as field_worker 403
+PASS run 200 summary
+PASS lock taken first, procedure called, lock released last
+PASS assignments query uses last_match id
+PASS lock name + timeout
+PASS lock busy -> 409, procedure never called
+PASS lock busy: RELEASE_LOCK not needed/called
+PASS unexpected error -> 500, lock still released
+PASS match request as field_worker 403
+PASS match request 200
+PASS calls sp_match_request(5)
+PASS no supply -> 409 with message
+PASS lock released after SIGNAL
+PASS no vehicle -> 409
+PASS match missing request 404
+PASS match bad id 400
+PASS history 200
+PASS history missing request 404
+PASS complete as field_worker 403
+PASS complete 200
+PASS calls sp_complete_delivery(11)
+PASS complete twice -> 409, procedure not called
+PASS lock released after 409
+PASS complete missing match 404
+PASS all 12 distinct SQL statements parse as MySQL
+
+=== mongo.test.js ===
+PASS seed incident passes validator
+PASS seed field update passes validator
+PASS validator rejects bad severity
+PASS validator rejects missing location
+PASS validator rejects lat 91 (coords [lng,lat])
+PASS validator rejects swapped lng/lat out of range
+PASS validator rejects duplicate request ids
+PASS validator rejects date as string
+PASS validator rejects update without incident_report_id
+PASS validator rejects non-string requirement
+PASS incidents no token 401
+PASS create as logistics 403
+PASS create 201
+PASS GeoJSON stored as [lng, lat]
+PASS reported_by from token, not client
+PASS created_at is a Date
+PASS API-built incident passes validator
+PASS related_request_ids defaults to []
+PASS unknown MySQL request id -> 400
+PASS MySQL IN check params
+PASS create invalid: lat 100 400
+PASS create invalid: missing title 400
+PASS create invalid: title 2 chars 400
+PASS create invalid: bad severity 400
+PASS create invalid: client sets reported_by 400
+PASS create invalid: request id 0 400
+PASS create invalid: request ids not array 400
+PASS create invalid: lng 181 400
+PASS create invalid: latitude string 400
+PASS list 200 + shape
+PASS list filter: severity + request_id array match
+PASS list filter: type regex escaped, case-insensitive
+PASS list filter: search escaped, in title/description
+PASS list paging + sort
+PASS list bad severity 400
+PASS list bad order 400
+PASS operator injection via severity[$ne] never reaches the query
+PASS repeated param (array) rejected 400
+PASS get bad id 400
+PASS get 12-char string id 400
+PASS get missing 404
+PASS get one includes field_updates
+PASS patch empty 400
+PASS patch location not allowed 400
+PASS patch 200, $set + updated_at
+PASS patch missing 404
+PASS delete with updates 409
+PASS delete as field_worker 403
+PASS delete 204
+PASS delete missing 404
+PASS nearby 200 + distance_km
+PASS $geoNear is first stage, [lng,lat], meters, spherical
+PASS nearby severity filter + limit
+PASS nearby default radius 10 km
+PASS nearby missing lat 400
+PASS nearby lat 95 400
+PASS nearby lat abc 400
+PASS nearby radius 9999 400
+PASS stats shape + zero-filled severities
+PASS stats on empty collection
+PASS add update as logistics 403
+PASS add update 201
+PASS update: worker from token, ObjectId link, trimmed unique requirements
+PASS API-built field update passes validator
+PASS update without optional fields: requirements default []
+PASS add update to missing incident 404
+PASS add update invalid: no situation 400
+PASS add update invalid: empty situation 400
+PASS add update invalid: requirements not array 400
+PASS add update invalid: requirement empty string 400
+PASS add update invalid: 21 requirements 400
+PASS add update invalid: unknown field worker_name 400
+PASS list updates paged
+PASS field-updates filters
+PASS field-updates bad incident_id 400
+PASS requirements aggregation
+PASS field-update get one
+PASS field-update missing 404
+PASS Mongo validation error (121) -> 400
+PASS Mongo duplicate key (11000) -> 409, no leak
+PASS all 1 distinct SQL statements parse as MySQL
+
+=== victims-requests.test.js ===
+PASS victims no token 401
+PASS victims list 200 + shape
+PASS default paging params [20,0]
+PASS filters+search escaped+paging params
+PASS sort whitelisted into ORDER BY
+PASS bad priority 400
+PASS bad limit 400
+PASS bad page 0 400
+PASS sort injection 400
+PASS order injection 400
+PASS limit clamped to 100
+PASS get id=abc 400
+PASS get missing 404
+PASS get one 200
+PASS create as logistics 403
+PASS create as field_worker 201
+PASS insert columns/params
+PASS create invalid: lat out of range 400
+PASS create invalid: lng out of range 400
+PASS create invalid: missing latitude 400
+PASS create invalid: group_size 0 400
+PASS create invalid: group_size string 400
+PASS create invalid: group_size float 400
+PASS create invalid: bad priority 400
+PASS create invalid: unknown field 400
+PASS create invalid: latitude string 400
+PASS create invalid: name too long 400
+PASS create minimal with name:null 201
+PASS array body 400
+PASS patch empty 400
+PASS patch 200
+PASS patch SQL
+PASS patch as logistics 403
+PASS patch missing 404
+PASS delete as field_worker 403
+PASS delete 204
+PASS delete missing 404
+PASS delete referenced victim 409
+PASS requests list 200, match null
+PASS request filter params order
+PASS bad status 400
+PASS bad person_id 400
+PASS requests sort whitelist
+PASS request with nested match
+PASS request missing 404
+PASS request create as logistics 403
+PASS request create 201
+PASS resource_type trimmed+lowercased
+PASS request create invalid: missing person_id 400
+PASS request create invalid: quantity 0 400
+PASS request create invalid: quantity negative 400
+PASS request create invalid: empty resource_type 400
+PASS request create invalid: status in body rejected 400
+PASS request create invalid: quantity string 400
+PASS request unknown person FK -> 400
+PASS CHECK violation -> 400
+PASS cancel pending 200
+PASS cancel SQL guards on pending
+PASS cancel matched 409
+PASS cancel missing 404
+PASS cancel as logistics 403
+PASS trigger SIGNAL -> 409 with message
+PASS unknown DB error -> 500, no leak
+PASS all emitted SQL parses as MySQL
+
+=== Summary ===
+ok    auth.test.js                 18 passed, 0 failed
+ok    crossdb.test.js              26 passed, 0 failed
+ok    dashboard.test.js            15 passed, 0 failed
+ok    infrastructure.test.js       58 passed, 0 failed
+ok    matching.test.js             32 passed, 0 failed
+ok    mongo.test.js                81 passed, 0 failed
+ok    victims-requests.test.js     64 passed, 0 failed
+
+Total: 294 passed, 0 failed across 7 files
