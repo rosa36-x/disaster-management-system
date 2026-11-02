@@ -67,6 +67,7 @@ h.start(4103, async (call, check) => {
   r = await call('POST', '/api/supplies/34/restock', { amount: 25 }, T.logistics);
   check('restock 200 + atomic SQL', r.status === 200 && h.calls[0].sql === 'UPDATE supply SET quantity = quantity + ? WHERE supply_id = ?' && JSON.stringify(h.calls[0].params) === '[25,34]', JSON.stringify(h.calls[0]));
   check('restock amount 0 400', (await call('POST', '/api/supplies/34/restock', { amount: 0 }, T.admin)).status === 400);
+  check('restock negative amount 400', (await call('POST', '/api/supplies/34/restock', { amount: -10 }, T.admin)).status === 400);
   check('restock missing amount 400', (await call('POST', '/api/supplies/34/restock', {}, T.admin)).status === 400);
   check('restock as field_worker 403', (await call('POST', '/api/supplies/34/restock', { amount: 5 }, T.field)).status === 403);
   h.handler = (sql) => sql.startsWith('UPDATE') ? [{}] : [[]];
