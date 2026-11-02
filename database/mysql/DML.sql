@@ -25,7 +25,13 @@ VALUES
 ('Harish',12.885000,77.590000,4,'medium'),
 ('Preeti',13.025000,77.630000,3,'low'),
 ('Sanjay',12.970000,77.680000,6,'high'),
-('Aarti',12.915000,77.650000,2,'medium');
+('Aarti',12.915000,77.650000,2,'medium'),
+('Tara',12.900000,77.625000,6,'high'),
+('Imran',12.960000,77.665000,10,'critical'),
+('Lakshmi',13.005000,77.570000,7,'critical'),
+('Joseph',12.870000,77.600000,4,'medium'),
+('Zoya',12.945000,77.705000,8,'medium'),
+('Girish',13.040000,77.640000,5,'high');
 
 
 -- =========================================================
@@ -53,7 +59,9 @@ VALUES
 ('East Relief Depot',12.970000,77.700000),
 ('South Relief Depot',12.860000,77.640000),
 ('North Relief Depot',13.060000,77.570000),
-('Central Emergency Depot',12.965000,77.590000);
+('Central Emergency Depot',12.965000,77.590000),
+('Ring Road Depot',12.950000,77.720000),
+('Garden City Depot',12.915000,77.625000);
 
 
 -- =========================================================
@@ -80,12 +88,15 @@ VALUES
 ('Relief Camp Gamma',13.030000,77.680000,350,90),
 ('Relief Camp Delta',12.880000,77.570000,200,75),
 ('District Shelter',13.070000,77.590000,500,220),
-('Emergency Shelter',12.920000,77.550000,175,40);
+('Emergency Shelter',12.920000,77.550000,175,40),
+('Ward Community Shelter',13.025000,77.575000,300,110),
+('Eastside Relief Camp',12.965000,77.650000,350,130),
+('Lakeside Hall Shelter',12.990000,77.690000,250,90);
 
 
 -- =========================================================
 -- 4. ROUTE
--- Final: 29
+-- Final: 23
 -- =========================================================
 
 INSERT INTO route
@@ -118,7 +129,7 @@ VALUES
 
 -- =========================================================
 -- 5. SUPPLY
--- Final: 33
+-- Final: 24
 -- =========================================================
 
 INSERT INTO supply
@@ -152,7 +163,7 @@ VALUES
 
 -- =========================================================
 -- 6. VEHICLE
--- Final: 28
+-- Final: 23
 -- =========================================================
 
 INSERT INTO vehicle
@@ -185,7 +196,7 @@ VALUES
 
 -- =========================================================
 -- 7. REQUEST
--- Final: 34
+-- Final: 24
 --
 -- request_history entries are automatically created
 -- by trg_req_ins for every request inserted.
@@ -236,142 +247,3 @@ VALUES
 ('logistics','Logistics Manager','$2b$10$zacEYkVoSbjUNt8lxqOk9.AqJjw3YxKHbwy5CjruzvsJxJBCzZOfS','logistics_manager'),
 ('fieldworker','Field Worker','$2b$10$33Y3T.9H9pUj7ny6RTfrcOXqHEu/2XAh2Tm/j.5hdk1tEt0qRZ7X.','field_worker');
 
-
--- =========================================================
--- FUNCTIONS
--- =========================================================
-
-CREATE FUNCTION fn_distance_km(lat1 DOUBLE, lon1 DOUBLE, lat2 DOUBLE, lon2 DOUBLE)
-RETURNS DOUBLE DETERMINISTIC
-RETURN 6371*2*ASIN(SQRT(POW(SIN(RADIANS(lat2-lat1)/2),2)
-  + COS(RADIANS(lat1))*COS(RADIANS(lat2))*POW(SIN(RADIANS(lon2-lon1)/2),2)));
-
-CREATE FUNCTION fn_shelter_free(p_id INT) RETURNS INT DETERMINISTIC
-RETURN (SELECT capacity-occupancy FROM shelter WHERE shelter_id=p_id);
-
--- =========================================================
--- TRIGGERS
--- =========================================================
-
-DELIMITER //
-CREATE TRIGGER trg_req_ins AFTER INSERT ON request FOR EACH ROW
-BEGIN
-  INSERT INTO request_history(request_id,old_status,new_status)
-  VALUES (NEW.request_id,NULL,NEW.status);
-END//
-
-CREATE TRIGGER trg_req_upd AFTER UPDATE ON request FOR EACH ROW
-BEGIN
-  IF OLD.status <> NEW.status THEN
-    INSERT INTO request_history(request_id,old_status,new_status)
-    VALUES (NEW.request_id,OLD.status,NEW.status);
-  END IF;
-END//
-
-CREATE TRIGGER trg_match_bi BEFORE INSERT ON match_assignment FOR EACH ROW
-BEGIN
-  DECLARE v_have INT; DECLARE v_t1 VARCHAR(50); DECLARE v_t2 VARCHAR(50);
-  SELECT quantity,resource_type INTO v_have,v_t1 FROM supply WHERE supply_id=NEW.supply_id;
-  SELECT resource_type INTO v_t2 FROM request WHERE request_id=NEW.request_id;
-  IF v_t1 <> v_t2 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Resource type mismatch';
-  END IF;
-  IF v_have < NEW.assigned_qty THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Insufficient supply';
-  END IF;
-END//
-
-CREATE TRIGGER trg_match_ai AFTER INSERT ON match_assignment FOR EACH ROW
-BEGIN
-  UPDATE supply SET quantity=quantity-NEW.assigned_qty WHERE supply_id=NEW.supply_id;
-  UPDATE request SET status='matched' WHERE request_id=NEW.request_id;
-  IF NEW.vehicle_id IS NOT NULL THEN
-    UPDATE vehicle SET status='en_route' WHERE vehicle_id=NEW.vehicle_id;
-  END IF;
-END//
-
-DELIMITER ;
-
-
--- =========================================================
--- PROCEDURES
--- =========================================================
-
-DELIMITER //
-
-CREATE PROCEDURE sp_match_request(IN p_req INT)
-BEGIN
-  DECLARE v_type VARCHAR(50); DECLARE v_qty INT; DECLARE v_status VARCHAR(20);
-  DECLARE v_lat DECIMAL(9,6); DECLARE v_lon DECIMAL(9,6);
-  DECLARE v_supply INT; DECLARE v_slat DECIMAL(9,6); DECLARE v_slon DECIMAL(9,6);
-  DECLARE v_veh INT; DECLARE v_vlat DECIMAL(9,6); DECLARE v_vlon DECIMAL(9,6);
-  DECLARE v_dist DOUBLE; DECLARE v_eta INT;
-  DECLARE CONTINUE HANDLER FOR NOT FOUND BEGIN END;
-
-  SELECT r.resource_type,r.quantity,r.status,v.latitude,v.longitude
-    INTO v_type,v_qty,v_status,v_lat,v_lon
-    FROM request r JOIN victim v ON r.person_id=v.person_id
-    WHERE r.request_id=p_req;
-
-  IF v_status IS NULL OR v_status <> 'pending' THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Request not found or not pending';
-  END IF;
-
-  -- nearest supply (depot or shelter) with enough stock
-  SELECT s.supply_id, COALESCE(d.latitude,sh.latitude), COALESCE(d.longitude,sh.longitude)
-    INTO v_supply,v_slat,v_slon
-    FROM supply s
-    LEFT JOIN depot d ON s.depot_id=d.depot_id
-    LEFT JOIN shelter sh ON s.shelter_id=sh.shelter_id
-    WHERE s.resource_type=v_type AND s.quantity>=v_qty
-    ORDER BY fn_distance_km(v_lat,v_lon,COALESCE(d.latitude,sh.latitude),COALESCE(d.longitude,sh.longitude))
-    LIMIT 1;
-  IF v_supply IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='No supply available';
-  END IF;
-
-  -- nearest available vehicle to the supply point
-  SELECT vehicle_id,latitude,longitude INTO v_veh,v_vlat,v_vlon
-    FROM vehicle
-    WHERE status='available' AND capacity>=v_qty
-    ORDER BY fn_distance_km(v_slat,v_slon,latitude,longitude) LIMIT 1;
-  IF v_veh IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='No vehicle available';
-  END IF;
-
-  SET v_dist = fn_distance_km(v_vlat,v_vlon,v_slat,v_slon) + fn_distance_km(v_slat,v_slon,v_lat,v_lon);
-  SET v_eta  = CEIL(v_dist/40*60);   -- assumes 40 km/h
-
-  INSERT INTO match_assignment(request_id,supply_id,vehicle_id,assigned_qty,eta_minutes)
-  VALUES (p_req,v_supply,v_veh,v_qty,v_eta);
-END//
-
-CREATE PROCEDURE sp_match_all_pending()
-BEGIN
-  DECLARE done INT DEFAULT 0; DECLARE rid INT;
-  DECLARE cur CURSOR FOR
-    SELECT r.request_id FROM request r JOIN victim v ON r.person_id=v.person_id
-    WHERE r.status='pending'
-    ORDER BY FIELD(v.priority,'critical','high','medium','low'), v.group_size DESC, r.requested_at;
-  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
-  OPEN cur;
-  lp: LOOP
-    FETCH cur INTO rid;
-    IF done THEN LEAVE lp; END IF;
-    BEGIN
-      DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN END;  -- skip unmatchable requests
-      CALL sp_match_request(rid);
-    END;
-  END LOOP;
-  CLOSE cur;
-END//
-
-CREATE PROCEDURE sp_complete_delivery(IN p_match INT)
-BEGIN
-  DECLARE v_req INT; DECLARE v_veh INT;
-  SELECT request_id,vehicle_id INTO v_req,v_veh FROM match_assignment WHERE match_id=p_match;
-  UPDATE request SET status='delivered' WHERE request_id=v_req;
-  UPDATE vehicle SET status='available' WHERE vehicle_id=v_veh;
-END//
-
-DELIMITER ;
