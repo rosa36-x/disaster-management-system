@@ -9,6 +9,8 @@ const {
 const { parsePagination, paginated } = require('../utils/query');
 const { toApi } = require('../utils/mongo');
 const { SEVERITIES } = require('../db/mongoSchema');
+const { REQUEST_SELECT, shapeRequest } = require('../utils/requestQuery');
+const nearestDepots = require('../utils/nearestDepots');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -219,6 +221,48 @@ router.post('/:id/updates', requireRole(...WRITERS), async (req, res) => {
   };
   await fieldUpdates().insertOne(doc);
   res.status(201).json({ field_update: toApi(doc) });
+});
+
+// GET /api/incidents/:id/requests  (cross-database)
+// The incident comes from MongoDB; the requests it lists in related_request_ids come
+// from MySQL. missing_request_ids lists ids that no longer exist in MySQL.
+router.get('/:id/requests', async (req, res) => {
+  const incident = await mustFindIncident(parseObjectId(req.params.id));
+  const ids = incident.related_request_ids || [];
+
+  let requests = [];
+  if (ids.length > 0) {
+    const [rows] = await pool.query(`${REQUEST_SELECT} WHERE r.request_id IN (?) ORDER BY r.request_id`, [ids]);
+    requests = rows.map(shapeRequest);
+  }
+
+  const byStatus = { pending: 0, matched: 0, delivered: 0, cancelled: 0 };
+  for (const r of requests) byStatus[r.status] += 1;
+  const found = new Set(requests.map((r) => r.request_id));
+
+  res.json({
+    incident: { id: String(incident._id), title: incident.title, disaster_type: incident.disaster_type, severity: incident.severity },
+    requests,
+    summary: { total: requests.length, by_status: byStatus },
+    missing_request_ids: ids.filter((id) => !found.has(id)),
+  });
+});
+
+// GET /api/incidents/:id/nearest-depots?resource_type=&min_quantity=1&limit=3  (cross-database)
+// The incident's location comes from MongoDB; depots and stock come from MySQL.
+router.get('/:id/nearest-depots', async (req, res) => {
+  const incident = await mustFindIncident(parseObjectId(req.params.id));
+  const resourceType = queryText(req.query.resource_type, 'resource_type', 50);
+  const minQuantity = queryNumber(req.query.min_quantity, 'min_quantity', { min: 1, max: 10000000 }) ?? 1;
+  const { limit } = parsePagination({ limit: req.query.limit }, { defaultLimit: 3, maxLimit: 20 });
+
+  const [lng, lat] = incident.location.coordinates; // GeoJSON order
+  const data = await nearestDepots(lat, lng, {
+    resourceType: resourceType && resourceType.toLowerCase(),
+    minQuantity,
+    limit,
+  });
+  res.json({ incident: { id: String(incident._id), title: incident.title, latitude: lat, longitude: lng }, data });
 });
 
 module.exports = router;

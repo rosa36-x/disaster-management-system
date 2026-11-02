@@ -5,6 +5,9 @@ const withMatchingLock = require('../utils/matchingLock');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { parseId, queryEnum, queryText, escapeLike, validateBody } = require('../utils/validate');
 const { parsePagination, parseSort, paginated } = require('../utils/query');
+const { REQUEST_SELECT: SELECT, shapeRequest: shape } = require('../utils/requestQuery');
+const { getMongoDb } = require('../db/mongo');
+const { toApi } = require('../utils/mongo');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -22,14 +25,6 @@ const requestSchema = {
   description: { type: 'string', max: 5000, nullable: true },
 };
 
-const SELECT = `
-  SELECT r.request_id, r.person_id, v.name AS victim_name, v.priority AS victim_priority,
-         r.resource_type, r.quantity, r.status, r.requested_at, r.description,
-         m.match_id, m.supply_id, m.vehicle_id, m.assigned_qty, m.eta_minutes, m.matched_at
-  FROM request r
-  JOIN victim v ON v.person_id = r.person_id
-  LEFT JOIN match_assignment m ON m.request_id = r.request_id`;
-
 const SORTS = {
   requested_at: 'r.requested_at',
   request_id: 'r.request_id',
@@ -37,15 +32,6 @@ const SORTS = {
   status: 'r.status',
   victim_priority: 'v.priority',
 };
-
-// Groups the joined match_* columns into a nested "match" object (or null).
-function shape(row) {
-  const { match_id, supply_id, vehicle_id, assigned_qty, eta_minutes, matched_at, ...request } = row;
-  request.match = match_id
-    ? { match_id, supply_id, vehicle_id, assigned_qty, eta_minutes, matched_at }
-    : null;
-  return request;
-}
 
 async function findRequest(id) {
   const [rows] = await pool.query(`${SELECT} WHERE r.request_id = ?`, [id]);
@@ -164,6 +150,19 @@ router.post('/:id/match', requireRole('admin', 'logistics_manager'), async (req,
 
   await withMatchingLock((conn) => conn.query('CALL sp_match_request(?)', [id]));
   res.json({ request: await findRequest(id) });
+});
+
+// GET /api/requests/:id/incidents -> MongoDB incident reports that reference this request
+router.get('/:id/incidents', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!(await findRequest(id))) throw new HttpError(404, 'Request not found');
+
+  const incidents = await getMongoDb()
+    .collection('incident_reports')
+    .find({ related_request_ids: id })
+    .sort({ created_at: -1 })
+    .toArray();
+  res.json({ request_id: id, incidents: incidents.map(toApi) });
 });
 
 module.exports = router;

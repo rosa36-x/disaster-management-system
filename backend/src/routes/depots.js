@@ -2,9 +2,10 @@ const express = require('express');
 const pool = require('../db/mysql');
 const HttpError = require('../utils/httpError');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { parseId, queryText, escapeLike, validateBody } = require('../utils/validate');
+const { parseId, queryText, queryNumber, escapeLike, validateBody } = require('../utils/validate');
 const { parsePagination, parseSort, paginated, filters } = require('../utils/query');
 const { insertRow, updateRow } = require('../utils/sql');
+const nearestDepots = require('../utils/nearestDepots');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -43,6 +44,24 @@ router.get('/', async (req, res) => {
     pool.query(`SELECT COUNT(*) AS total FROM depot ${f.sql()}`, f.params),
   ]);
   res.json(paginated(rows, count.total, paging));
+});
+
+// GET /api/depots/nearest?lat=&lng=&resource_type=&min_quantity=1&limit=3
+// Closest depots to a point. With resource_type, only depots that hold at least
+// min_quantity of it. (Must be declared before /:id so "nearest" isn't read as an id.)
+router.get('/nearest', async (req, res) => {
+  const lat = queryNumber(req.query.lat, 'lat', { min: -90, max: 90, required: true });
+  const lng = queryNumber(req.query.lng, 'lng', { min: -180, max: 180, required: true });
+  const resourceType = queryText(req.query.resource_type, 'resource_type', 50);
+  const minQuantity = queryNumber(req.query.min_quantity, 'min_quantity', { min: 1, max: 10000000 }) ?? 1;
+  const { limit } = parsePagination({ limit: req.query.limit }, { defaultLimit: 3, maxLimit: 20 });
+
+  const data = await nearestDepots(lat, lng, {
+    resourceType: resourceType && resourceType.toLowerCase(),
+    minQuantity,
+    limit,
+  });
+  res.json({ data });
 });
 
 // GET /api/depots/:id  -> the depot plus what it currently stocks
